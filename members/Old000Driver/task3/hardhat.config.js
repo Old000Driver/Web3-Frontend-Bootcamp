@@ -20,10 +20,15 @@ module.exports = {
     sepolia: {
       url: process.env.SEPOLIA_RPC_URL,
       accounts: [process.env.PRIVATE_KEY],
+      timeout: 60000, // 增加超时时间到60秒
     },
   },
   etherscan: {
-    apiKey: { sepolia: process.env.ETHERSCAN_API_KEY }, // 验证合约时需要
+    apiKey: process.env.ETHERSCAN_API_KEY, // 简化配置
+    customChains: [], // 如果需要自定义链，可以在这里添加
+  },
+  sourcify: {
+    enabled: true, // 启用 Sourcify 验证
   },
   paths: {
     sources: "./contracts",
@@ -32,6 +37,6 @@ module.exports = {
     artifacts: "./artifacts",
   },
   mocha: {
-    timeout: 40000,
+    timeout: 60000, // 增加测试超时时间
   },
 };

@@ -110,4 +110,128 @@ describe("NFTMarket", function () {
       ).to.be.reverted;
     });
   });
+
+  describe("下架商品", function () {
+    beforeEach(async function () {
+      const nftAddress = await myNFT.getAddress();
+      const tokenAddress = await myToken.getAddress();
+      
+      // 先上架一个NFT
+      await nftMarket.connect(seller).listNFT(
+        nftAddress,
+        TOKEN_ID, 
+        PRICE,
+        tokenAddress
+      );
+    });
+
+    it("卖家应该能够下架NFT", async function () {
+      const nftAddress = await myNFT.getAddress();
+      
+      await expect(nftMarket.connect(seller).delistNFT(nftAddress, TOKEN_ID))
+        .to.emit(nftMarket, "ItemDelisted")
+        .withArgs(seller.address, nftAddress, TOKEN_ID);
+
+      // 验证NFT已返还给卖家
+      expect(await myNFT.ownerOf(TOKEN_ID)).to.equal(seller.address);
+      
+      // 验证listing已被删除
+      const listing = await nftMarket.listings(nftAddress, TOKEN_ID);
+      expect(listing.price).to.equal(0);
+    });
+
+    it("非卖家不能下架NFT", async function () {
+      const nftAddress = await myNFT.getAddress();
+      await expect(
+        nftMarket.connect(buyer).delistNFT(nftAddress, TOKEN_ID)
+      ).to.be.revertedWith("Not the seller");
+    });
+  });
+
+  describe("查询功能", function () {
+    const TOKEN_ID_2 = 1;
+    beforeEach(async function () {
+      const nftAddress = await myNFT.getAddress();
+      const tokenAddress = await myToken.getAddress();
+
+      // 铸造第二个NFT
+      await myNFT.mint(seller.address, "ipfs://test2");
+      
+      // 上架两个NFT
+      await nftMarket.connect(seller).listNFT(
+        nftAddress,
+        TOKEN_ID,
+        PRICE,
+        tokenAddress
+      );
+      await nftMarket.connect(seller).listNFT(
+        nftAddress,
+        TOKEN_ID_2,
+        parseEther("2.0"),
+        tokenAddress
+      );
+    });
+
+    it("应该能正确获取上架信息", async function () {
+      const nftAddress = await myNFT.getAddress();
+      const tokenAddress = await myToken.getAddress();
+      
+      const listing = await nftMarket.getListing(nftAddress, TOKEN_ID);
+      expect(listing.seller).to.equal(seller.address);
+      expect(listing.price).to.equal(PRICE);
+      expect(listing.erc20Token).to.equal(tokenAddress);
+    });
+
+    it("应该正确判断NFT是否上架", async function () {
+      const nftAddress = await myNFT.getAddress();
+      
+      expect(await nftMarket.isListed(nftAddress, TOKEN_ID)).to.be.true;
+      expect(await nftMarket.isListed(nftAddress, 999)).to.be.false;
+    });
+
+    it("应该能正确获取所有上架的NFT信息", async function () {
+      const nftAddress = await myNFT.getAddress();
+      const tokenAddress = await myToken.getAddress();
+      
+      const [items, sellers, prices, erc20Tokens] = await nftMarket.getAllListedNFTs();
+      
+      // 验证返回的数组长度
+      expect(items.length).to.equal(2);
+      expect(sellers.length).to.equal(2);
+      expect(prices.length).to.equal(2);
+      expect(erc20Tokens.length).to.equal(2);
+      
+      // 验证第一个NFT的信息
+      expect(items[0].nftContract).to.equal(nftAddress);
+      expect(items[0].tokenId).to.equal(TOKEN_ID);
+      expect(sellers[0]).to.equal(seller.address);
+      expect(prices[0]).to.equal(PRICE);
+      expect(erc20Tokens[0]).to.equal(tokenAddress);
+      
+      // 验证第二个NFT的信息
+      expect(items[1].nftContract).to.equal(nftAddress);
+      expect(items[1].tokenId).to.equal(TOKEN_ID_2);
+      expect(sellers[1]).to.equal(seller.address);
+      expect(prices[1]).to.equal(parseEther("2.0"));
+      expect(erc20Tokens[1]).to.equal(tokenAddress);
+    });
+
+    it("应该能正确获取上架NFT的总数", async function () {
+      expect(await nftMarket.getListedNFTCount()).to.equal(2);
+      
+      // 下架一个NFT后，总数应该减少
+      const nftAddress = await myNFT.getAddress();
+      await nftMarket.connect(seller).delistNFT(nftAddress, TOKEN_ID);
+      expect(await nftMarket.getListedNFTCount()).to.equal(1);
+    });
+
+    it("购买NFT后应该从列表中移除", async function () {
+      const nftAddress = await myNFT.getAddress();
+      await nftMarket.connect(buyer).buyNFT(nftAddress, TOKEN_ID);
+      
+      const [items] = await nftMarket.getAllListedNFTs();
+      expect(items.length).to.equal(1);
+      expect(items[0].tokenId).to.equal(TOKEN_ID_2);
+    });
+  });
 });
